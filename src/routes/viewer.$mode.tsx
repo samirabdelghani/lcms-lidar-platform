@@ -131,7 +131,7 @@ function ViewerPage() {
           <Hexagon className="size-5 text-accent" />
           <div className="font-semibold tracking-[0.14em]">RUNWAY CORE</div>
           <span className="rounded-full border border-border bg-background/60 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            {isLcms ? "LCMS Asset Mode" : "LiDAR Geospatial Mode"}
+            {isLcms ? "LCMS Mode" : "LiDAR Geospatial Mode"}
           </span>
         </div>
 

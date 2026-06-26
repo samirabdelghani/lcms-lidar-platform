@@ -24,7 +24,7 @@ export const Route = createFileRoute("/")({
 const modes = [
   {
     id: "lcms",
-    title: "LCMS Asset Mode",
+    title: "LCMS Mode",
     subtitle: "Pavement distress & macrotexture",
     description:
       "Ingest raw LCMS continuous JSON logs. Parse NMEA GGA/RMC sentences, chainage and odometer telemetry into an interactive trajectory.",
