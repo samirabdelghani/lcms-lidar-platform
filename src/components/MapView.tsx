@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Polyline, Marker, useMap, LayersControl } from "react-leaflet";
 import L from "leaflet";
-import type { Runs } from "@/lib/parsers";
+import { buildSmoothedSegments, decimateGpsPoints, type Runs } from "@/lib/parsers";
 
 // Fix default icon URLs for bundlers
 import iconUrl from "leaflet/dist/images/marker-icon.png";
@@ -25,10 +25,42 @@ function FitBounds({ runs }: { runs: Runs }) {
   return null;
 }
 
-const accentColor = "#5dbeff";
+// Distinct per-run colour palette (cycled)
+const RUN_COLORS = [
+  "#5dbeff",
+  "#7c4dff",
+  "#00c896",
+  "#f5a623",
+  "#ff4757",
+  "#22d3ee",
+  "#a78bfa",
+  "#facc15",
+];
 
-export function MapView({ runs, showTrack, showNodes }: { runs: Runs; showTrack: boolean; showNodes: boolean }) {
+export function MapView({
+  runs,
+  showTrack,
+  showNodes,
+  smooth = true,
+}: {
+  runs: Runs;
+  showTrack: boolean;
+  showNodes: boolean;
+  smooth?: boolean;
+}) {
   const runList = Object.entries(runs);
+
+  const rendered = useMemo(() => {
+    return runList.map(([id, pts]) => {
+      const decimated = decimateGpsPoints(pts, 5000);
+      const segments: [number, number][][] = smooth
+        ? buildSmoothedSegments(decimated)
+        : [decimated.map((p) => [p.lat, p.lon] as [number, number])];
+      return { id, pts, segments };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runs, smooth]);
+
   return (
     <MapContainer
       center={[20, 0]}
@@ -61,24 +93,33 @@ export function MapView({ runs, showTrack, showNodes }: { runs: Runs; showTrack:
       </LayersControl>
 
       {showTrack &&
-        runList.map(([id, pts]) => (
-          <Polyline
-            key={id}
-            positions={pts.map((p) => [p.lat, p.lon] as [number, number])}
-            pathOptions={{ color: accentColor, weight: 4, opacity: 0.9 }}
-          />
-        ))}
+        rendered.map(({ id, segments }, runIdx) =>
+          segments.map((seg, segIdx) => (
+            <Polyline
+              key={`${id}-${segIdx}`}
+              positions={seg}
+              pathOptions={{
+                color: RUN_COLORS[runIdx % RUN_COLORS.length],
+                weight: 4,
+                opacity: 0.9,
+              }}
+            />
+          )),
+        )}
 
       {showNodes &&
-        runList.map(([id, pts]) =>
+        rendered.map(({ id, pts }) =>
           pts.length > 0 ? (
             <Marker key={`s-${id}`} position={[pts[0].lat, pts[0].lon]} />
           ) : null,
         )}
       {showNodes &&
-        runList.map(([id, pts]) =>
+        rendered.map(({ id, pts }) =>
           pts.length > 1 ? (
-            <Marker key={`e-${id}`} position={[pts[pts.length - 1].lat, pts[pts.length - 1].lon]} />
+            <Marker
+              key={`e-${id}`}
+              position={[pts[pts.length - 1].lat, pts[pts.length - 1].lon]}
+            />
           ) : null,
         )}
 
