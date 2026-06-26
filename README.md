@@ -5,7 +5,7 @@ Web port of `pgr_viewer_pro_v7_unified.py`, with all parsing running fully in th
 
 ## Features
 
-- **Dual-mode launcher** — LCMS Asset Mode or LiDAR Geospatial Mode.
+- **Dual-mode launcher** — LCMS Mode or LiDAR Geospatial Mode.
 - **LCMS parser** — ingests raw JSON-per-line `.TXT` logs, decodes NMEA `GGA` / `RMC`
   sentences, and extracts chainage / odometer / speed telemetry.
 - **LiDAR parser** — `.KML` and compressed `.KMZ` (unzipped client-side) into one or more
