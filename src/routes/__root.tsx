@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "PGR Platform" },
+      { name: "description", content: "Project Hub Deluxe is a web application for managing and showcasing projects, deployable on GitHub." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "PGR Platform" },
+      { property: "og:description", content: "Project Hub Deluxe is a web application for managing and showcasing projects, deployable on GitHub." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "PGR Platform" },
+      { name: "twitter:description", content: "Project Hub Deluxe is a web application for managing and showcasing projects, deployable on GitHub." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2042b48d-fb59-4117-96fd-8c7823d74b79/id-preview-dfe59f22--0385f81a-0074-452f-885b-25226fa5427f.lovable.app-1782481807386.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2042b48d-fb59-4117-96fd-8c7823d74b79/id-preview-dfe59f22--0385f81a-0074-452f-885b-25226fa5427f.lovable.app-1782481807386.png" },
     ],
     links: [
       {
