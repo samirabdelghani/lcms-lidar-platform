@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ViewerModeRouteImport } from './routes/viewer.$mode'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ViewerModeRoute = ViewerModeRouteImport.update({
+  id: '/viewer/$mode',
+  path: '/viewer/$mode',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/viewer/$mode': typeof ViewerModeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/viewer/$mode': typeof ViewerModeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/viewer/$mode': typeof ViewerModeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/viewer/$mode'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/viewer/$mode'
+  id: '__root__' | '/' | '/viewer/$mode'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ViewerModeRoute: typeof ViewerModeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/viewer/$mode': {
+      id: '/viewer/$mode'
+      path: '/viewer/$mode'
+      fullPath: '/viewer/$mode'
+      preLoaderRoute: typeof ViewerModeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ViewerModeRoute: ViewerModeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
