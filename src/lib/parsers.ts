@@ -406,6 +406,12 @@ export function gpsToKml(runs: Runs, name = "Runway Core GPS"): string {
   return lines.join("\n");
 }
 
+export async function gpsToKmz(runs: Runs, name = "Runway Core GPS"): Promise<Blob> {
+  const zip = new JSZip();
+  zip.file("doc.kml", gpsToKml(runs, name));
+  return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+}
+
 export function downloadFile(content: string | Blob, filename: string, mime = "text/plain") {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
