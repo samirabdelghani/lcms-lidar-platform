@@ -18,6 +18,7 @@ import {
   extractGpsFromLcmsTxt,
   gpsToCsv,
   gpsToKml,
+  gpsToKmz,
   scanPgrFrames,
   summarizeRuns,
   type PgrScanResult,
