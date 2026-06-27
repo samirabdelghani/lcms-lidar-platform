@@ -119,9 +119,13 @@ function smoothSegment(seg: GpsPoint[], steps = 8): [number, number][] {
 
 /**
  * Split a track wherever consecutive points are more than `maxGapM` metres apart,
- * then Catmull-Rom smooth each segment.
+ * then Catmull-Rom smooth each segment with `steps` interpolations per span.
  */
-export function buildSmoothedSegments(pts: GpsPoint[], maxGapM = 50): [number, number][][] {
+export function buildSmoothedSegments(
+  pts: GpsPoint[],
+  maxGapM = 50,
+  steps = 8,
+): [number, number][][] {
   if (pts.length === 0) return [];
   const segments: GpsPoint[][] = [];
   let current: GpsPoint[] = [pts[0]];
@@ -134,7 +138,41 @@ export function buildSmoothedSegments(pts: GpsPoint[], maxGapM = 50): [number, n
     }
   }
   if (current.length >= 2) segments.push(current);
-  return segments.map((s) => smoothSegment(s));
+  return segments.map((s) => smoothSegment(s, steps));
+}
+
+/** Apply decimation + (optional) smoothing across all runs; useful for exports. */
+export function processRunsForExport(
+  runs: Runs,
+  opts: { maxPoints: number; smooth: boolean; steps: number; maxGapM: number },
+): Runs {
+  const out: Runs = {};
+  for (const [k, pts] of Object.entries(runs)) {
+    const dec = decimateGpsPoints(pts, opts.maxPoints);
+    if (!opts.smooth) {
+      out[Number(k)] = dec;
+      continue;
+    }
+    const segs = buildSmoothedSegments(dec, opts.maxGapM, opts.steps);
+    const flat: GpsPoint[] = [];
+    let i = 0;
+    for (const seg of segs) {
+      for (const [lat, lon] of seg) {
+        const ref = dec[Math.min(i, dec.length - 1)];
+        flat.push({
+          lat,
+          lon,
+          altitude_m: ref?.altitude_m ?? 0,
+          chainage_m: ref?.chainage_m ?? 0,
+          speed_kh: ref?.speed_kh ?? 0,
+          name: ref?.name ?? `Pt ${i}`,
+        });
+        i++;
+      }
+    }
+    out[Number(k)] = flat;
+  }
+  return out;
 }
 
 // ─── LCMS log parsing ─────────────────────────────────────────

@@ -8,11 +8,7 @@ import iconUrl from "leaflet/dist/images/marker-icon.png";
 import iconRetinaUrl from "leaflet/dist/images/marker-icon-2x.png";
 import shadowUrl from "leaflet/dist/images/marker-shadow.png";
 
-L.Icon.Default.mergeOptions({
-  iconUrl,
-  iconRetinaUrl,
-  shadowUrl,
-});
+L.Icon.Default.mergeOptions({ iconUrl, iconRetinaUrl, shadowUrl });
 
 function FitBounds({ runs }: { runs: Runs }) {
   const map = useMap();
@@ -25,49 +21,56 @@ function FitBounds({ runs }: { runs: Runs }) {
   return null;
 }
 
-// Distinct per-run colour palette (cycled)
 const RUN_COLORS = [
-  "#5dbeff",
-  "#7c4dff",
-  "#00c896",
-  "#f5a623",
-  "#ff4757",
-  "#22d3ee",
-  "#a78bfa",
-  "#facc15",
+  "#5dbeff", "#7c4dff", "#00c896", "#f5a623",
+  "#ff4757", "#22d3ee", "#a78bfa", "#facc15",
 ];
+
+export interface QualitySettings {
+  maxPoints: number;
+  steps: number;
+  maxGapM: number;
+}
 
 export function MapView({
   runs,
   showTrack,
   showNodes,
   smooth = true,
+  quality,
+  onStats,
 }: {
   runs: Runs;
   showTrack: boolean;
   showNodes: boolean;
   smooth?: boolean;
+  quality: QualitySettings;
+  onStats?: (s: { source: number; rendered: number }) => void;
 }) {
   const runList = Object.entries(runs);
 
   const rendered = useMemo(() => {
     return runList.map(([id, pts]) => {
-      const decimated = decimateGpsPoints(pts, 5000);
+      const decimated = decimateGpsPoints(pts, quality.maxPoints);
       const segments: [number, number][][] = smooth
-        ? buildSmoothedSegments(decimated)
+        ? buildSmoothedSegments(decimated, quality.maxGapM, quality.steps)
         : [decimated.map((p) => [p.lat, p.lon] as [number, number])];
-      return { id, pts, segments };
+      return { id, pts, decimated, segments };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runs, smooth]);
+  }, [runs, smooth, quality.maxPoints, quality.steps, quality.maxGapM]);
+
+  useEffect(() => {
+    const source = rendered.reduce((a, r) => a + r.pts.length, 0);
+    const renderedPts = rendered.reduce(
+      (a, r) => a + r.segments.reduce((b, s) => b + s.length, 0),
+      0,
+    );
+    onStats?.({ source, rendered: renderedPts });
+  }, [rendered, onStats]);
 
   return (
-    <MapContainer
-      center={[20, 0]}
-      zoom={2}
-      style={{ height: "100%", width: "100%" }}
-      worldCopyJump
-    >
+    <MapContainer center={[20, 0]} zoom={2} style={{ height: "100%", width: "100%" }} worldCopyJump>
       <LayersControl position="topright">
         <LayersControl.BaseLayer checked name="Satellite">
           <TileLayer
