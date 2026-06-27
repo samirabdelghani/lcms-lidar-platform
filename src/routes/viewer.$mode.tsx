@@ -19,6 +19,7 @@ import {
   gpsToCsv,
   gpsToKml,
   gpsToKmz,
+  processRunsForExport,
   scanPgrFrames,
   summarizeRuns,
   type PgrScanResult,
@@ -27,6 +28,8 @@ import {
 import { TelemetryDashboard } from "@/components/TelemetryDashboard";
 import { Console, type LogEntry } from "@/components/Console";
 import { FramePreview } from "@/components/FramePreview";
+import { QualityMenu } from "@/components/QualityMenu";
+import type { QualitySettings } from "@/components/MapView";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
