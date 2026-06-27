@@ -18,6 +18,7 @@ import {
   extractGpsFromLcmsTxt,
   gpsToCsv,
   gpsToKml,
+  gpsToKmz,
   scanPgrFrames,
   summarizeRuns,
   type PgrScanResult,
@@ -168,6 +169,16 @@ function ViewerPage() {
     log("GPS export → KML emitted.", "success");
   };
 
+  const exportKmz = async () => {
+    if (Object.keys(filteredRuns).length === 0) {
+      log("No GPS data to export.", "error");
+      return;
+    }
+    const blob = await gpsToKmz(filteredRuns);
+    downloadFile(blob, `runway-core-gps-${Date.now()}.kmz`, "application/vnd.google-earth.kmz");
+    log("GPS export → KMZ emitted.", "success");
+  };
+
   const exportFirstFramePlane = async () => {
     if (!pgrScan || !pgrSourceFile || pgrScan.frames.length === 0) {
       log("Queue a PGR stream first.", "error");
@@ -243,6 +254,7 @@ function ViewerPage() {
           <ExportMenu
             onCsv={exportCsv}
             onKml={exportKml}
+            onKmz={exportKmz}
             onPgrPlane={exportFirstFramePlane}
             hasGps={Object.keys(filteredRuns).length > 0}
             hasPgr={!!pgrScan && pgrScan.frames.length > 0}
@@ -407,12 +419,14 @@ function RunFilter({
 function ExportMenu({
   onCsv,
   onKml,
+  onKmz,
   onPgrPlane,
   hasGps,
   hasPgr,
 }: {
   onCsv: () => void;
   onKml: () => void;
+  onKmz: () => void | Promise<void>;
   onPgrPlane: () => void;
   hasGps: boolean;
   hasPgr: boolean;
@@ -447,6 +461,16 @@ function ExportMenu({
               className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               GPS Track → KML
+            </button>
+            <button
+              disabled={!hasGps}
+              onClick={() => {
+                setOpen(false);
+                void onKmz();
+              }}
+              className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              GPS Track → KMZ
             </button>
             <div className="my-1 h-px bg-border" />
             <button
