@@ -83,6 +83,12 @@ function ViewerPage() {
   const [pgrSourceFile, setPgrSourceFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pgrInputRef = useRef<HTMLInputElement>(null);
+  const [quality, setQuality] = useState<QualitySettings>({
+    maxPoints: 5000,
+    steps: 8,
+    maxGapM: 50,
+  });
+  const [renderStats, setRenderStats] = useState({ source: 0, rendered: 0 });
 
   const log = useCallback((text: string, level: LogEntry["level"] = "info") => {
     const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
