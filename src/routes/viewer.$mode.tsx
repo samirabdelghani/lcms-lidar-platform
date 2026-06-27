@@ -254,6 +254,7 @@ function ViewerPage() {
           <ExportMenu
             onCsv={exportCsv}
             onKml={exportKml}
+            onKmz={exportKmz}
             onPgrPlane={exportFirstFramePlane}
             hasGps={Object.keys(filteredRuns).length > 0}
             hasPgr={!!pgrScan && pgrScan.frames.length > 0}
