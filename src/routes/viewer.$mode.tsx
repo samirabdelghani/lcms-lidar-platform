@@ -157,13 +157,22 @@ function ViewerPage() {
     }
   };
 
+  const exportRuns = () =>
+    processRunsForExport(filteredRuns, {
+      maxPoints: quality.maxPoints,
+      smooth: layers.smooth,
+      steps: quality.steps,
+      maxGapM: quality.maxGapM,
+    });
+
   const exportCsv = () => {
     if (Object.keys(filteredRuns).length === 0) {
       log("No GPS data to export.", "error");
       return;
     }
-    downloadFile(gpsToCsv(filteredRuns), `runway-core-gps-${Date.now()}.csv`, "text/csv");
-    log("GPS export → CSV emitted.", "success");
+    const out = exportRuns();
+    downloadFile(gpsToCsv(out), `runway-core-gps-${Date.now()}.csv`, "text/csv");
+    log(`GPS export → CSV emitted (${countPts(out)} pts).`, "success");
   };
 
   const exportKml = () => {
@@ -171,12 +180,13 @@ function ViewerPage() {
       log("No GPS data to export.", "error");
       return;
     }
+    const out = exportRuns();
     downloadFile(
-      gpsToKml(filteredRuns),
+      gpsToKml(out),
       `runway-core-gps-${Date.now()}.kml`,
       "application/vnd.google-earth.kml+xml",
     );
-    log("GPS export → KML emitted.", "success");
+    log(`GPS export → KML emitted (${countPts(out)} pts).`, "success");
   };
 
   const exportKmz = async () => {
@@ -184,9 +194,10 @@ function ViewerPage() {
       log("No GPS data to export.", "error");
       return;
     }
-    const blob = await gpsToKmz(filteredRuns);
+    const out = exportRuns();
+    const blob = await gpsToKmz(out);
     downloadFile(blob, `runway-core-gps-${Date.now()}.kmz`, "application/vnd.google-earth.kmz");
-    log("GPS export → KMZ emitted.", "success");
+    log(`GPS export → KMZ emitted (${countPts(out)} pts).`, "success");
   };
 
   const exportFirstFramePlane = async () => {
@@ -270,6 +281,14 @@ function ViewerPage() {
             hasPgr={!!pgrScan && pgrScan.frames.length > 0}
           />
 
+          <QualityMenu
+            value={quality}
+            smooth={layers.smooth}
+            onSmoothChange={(v) => setLayers({ ...layers, smooth: v })}
+            onChange={setQuality}
+            stats={renderStats}
+          />
+
           <LayersMenu layers={layers} onChange={setLayers} />
         </div>
       </header>
@@ -328,11 +347,13 @@ function ViewerPage() {
                 showTrack={layers.track}
                 showNodes={layers.nodes}
                 smooth={layers.smooth}
+                quality={quality}
+                onStats={setRenderStats}
               />
             </Suspense>
             <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-md border border-border bg-background/80 px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider text-muted-foreground backdrop-blur">
               <Sparkles className="size-3 text-accent" />
-              {summary.totalPoints.toLocaleString()} pts · {summary.runCount} run(s)
+              {summary.totalPoints.toLocaleString()} src · {renderStats.rendered.toLocaleString()} drawn · {summary.runCount} run(s)
             </div>
           </div>
           <div className="h-44 shrink-0 rounded-xl border border-border bg-card/60 p-2 shadow-[var(--shadow-card)]">
