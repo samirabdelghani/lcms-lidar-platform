@@ -26,6 +26,7 @@ import {
 } from "@/lib/parsers";
 import { TelemetryDashboard } from "@/components/TelemetryDashboard";
 import { Console, type LogEntry } from "@/components/Console";
+import { FramePreview } from "@/components/FramePreview";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -289,20 +290,10 @@ function ViewerPage() {
                   ? `First frame @ byte 0x${pgrScan.frames[0]?.frameStart.toString(16).toUpperCase() ?? "—"}. JPEG12 imagery decode is decoder-bound; export raw plane payloads via the export menu.`
                   : "Queue a PGR laser stream or load a survey log to bring the canvas online."}
               </p>
-              {pgrScan && pgrScan.frames.length > 0 && (
-                <div className="mt-4 max-h-32 overflow-auto rounded border border-border bg-background/60 p-2 text-left font-mono text-[11px] text-muted-foreground">
-                  {pgrScan.frames.slice(0, 40).map((f, i) => (
-                    <div key={i}>
-                      f[{String(i).padStart(4, "0")}] @ 0x
-                      {f.frameStart.toString(16).toUpperCase()} · {f.planes.length} planes
-                    </div>
-                  ))}
-                  {pgrScan.frames.length > 40 && (
-                    <div className="opacity-60">… +{pgrScan.frames.length - 40} more</div>
-                  )}
-                </div>
-              )}
             </div>
+            {pgrScan && pgrSourceFile && pgrScan.frames.length > 0 && (
+              <FramePreview scan={pgrScan} file={pgrSourceFile} />
+            )}
           </div>
 
           <TelemetryDashboard
