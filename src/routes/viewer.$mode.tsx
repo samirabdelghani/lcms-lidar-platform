@@ -157,6 +157,8 @@ function ViewerPage() {
     }
   };
 
+  const countPts = (r: Runs) => Object.values(r).reduce((a, v) => a + v.length, 0);
+
   const exportRuns = () =>
     processRunsForExport(filteredRuns, {
       maxPoints: quality.maxPoints,
