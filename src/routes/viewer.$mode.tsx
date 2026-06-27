@@ -419,12 +419,14 @@ function RunFilter({
 function ExportMenu({
   onCsv,
   onKml,
+  onKmz,
   onPgrPlane,
   hasGps,
   hasPgr,
 }: {
   onCsv: () => void;
   onKml: () => void;
+  onKmz: () => void | Promise<void>;
   onPgrPlane: () => void;
   hasGps: boolean;
   hasPgr: boolean;
@@ -459,6 +461,16 @@ function ExportMenu({
               className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               GPS Track → KML
+            </button>
+            <button
+              disabled={!hasGps}
+              onClick={() => {
+                setOpen(false);
+                void onKmz();
+              }}
+              className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              GPS Track → KMZ
             </button>
             <div className="my-1 h-px bg-border" />
             <button
