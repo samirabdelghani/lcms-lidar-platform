@@ -169,6 +169,16 @@ function ViewerPage() {
     log("GPS export → KML emitted.", "success");
   };
 
+  const exportKmz = async () => {
+    if (Object.keys(filteredRuns).length === 0) {
+      log("No GPS data to export.", "error");
+      return;
+    }
+    const blob = await gpsToKmz(filteredRuns);
+    downloadFile(blob, `runway-core-gps-${Date.now()}.kmz`, "application/vnd.google-earth.kmz");
+    log("GPS export → KMZ emitted.", "success");
+  };
+
   const exportFirstFramePlane = async () => {
     if (!pgrScan || !pgrSourceFile || pgrScan.frames.length === 0) {
       log("Queue a PGR stream first.", "error");
