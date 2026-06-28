@@ -89,6 +89,7 @@ function ViewerPage() {
     maxGapM: 50,
   });
   const [renderStats, setRenderStats] = useState({ source: 0, rendered: 0 });
+  const [frameIdx, setFrameIdx] = useState(0);
 
   const log = useCallback((text: string, level: LogEntry["level"] = "info") => {
     const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
