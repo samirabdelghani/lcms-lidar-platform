@@ -80,7 +80,6 @@ function ViewerPage() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [pgrScan, setPgrScan] = useState<PgrScanResult | null>(null);
-  const [pgrSourceFile, setPgrSourceFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pgrInputRef = useRef<HTMLInputElement>(null);
   const [quality, setQuality] = useState<QualitySettings>({
