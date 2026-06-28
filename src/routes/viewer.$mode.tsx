@@ -270,6 +270,55 @@ function ViewerPage() {
     log(`Extracted JPEG payload (${(plane.size / 1024).toFixed(1)} KB) from cam ${plane.camera}.`, "success");
   };
 
+  /** ZIP every frame's 6 camera planes + a gps.csv that links each frame to lat/lon. */
+  const exportAllFrames = async () => {
+    if (!pgrScan || pgrScan.frames.length === 0) {
+      log("Queue a PGR stream first.", "error");
+      return;
+    }
+    setBusy(true);
+    setProgress(0);
+    const zip = new JSZip();
+    const csvRows = ["frame,cam,filename,lat,lon,run"];
+    const total = pgrScan.frames.length;
+    log(`Packaging ${total} frames + GPS into ZIP…`);
+    try {
+      for (let i = 0; i < total; i++) {
+        const frame = pgrScan.frames[i];
+        const src = pgrScan.files[frame.fileIndex];
+        const g = gpsForFrame(i);
+        const seen = new Set<number>();
+        for (const p of frame.planes) {
+          if (seen.has(p.camera)) continue;
+          seen.add(p.camera);
+          const fname = `frames/frame${String(i).padStart(5, "0")}_cam${p.camera}.jpg`;
+          const blob = src.slice(p.offset, p.offset + p.size, "image/jpeg");
+          zip.file(fname, blob);
+          csvRows.push(
+            `${i},${p.camera},${fname},${g?.lat ?? ""},${g?.lon ?? ""},${g?.run ?? ""}`,
+          );
+        }
+        if (i % 8 === 0) {
+          setProgress((i / total) * 90);
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }
+      zip.file("gps.csv", csvRows.join("\n"));
+      setProgress(95);
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      downloadFile(blob, `runway-core-frames-${Date.now()}.zip`, "application/zip");
+      setProgress(100);
+      log(`Frame bundle emitted (${total} frames, ${(blob.size / 1e6).toFixed(1)} MB).`, "success");
+    } catch (e) {
+      log(`Bundle failure: ${(e as Error).message}`, "error");
+    } finally {
+      setBusy(false);
+      setTimeout(() => setProgress(0), 800);
+    }
+  };
+
+
+
 
   return (
     <main className="flex h-screen flex-col bg-background text-foreground">
