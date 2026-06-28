@@ -257,6 +257,7 @@ function ViewerPage() {
           <input
             ref={pgrInputRef}
             type="file"
+            multiple
             hidden
             accept=".pgr,application/octet-stream"
             onChange={(e) => handlePgrFile(e.target.files)}
