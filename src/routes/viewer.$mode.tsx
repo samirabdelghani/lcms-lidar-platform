@@ -203,15 +203,18 @@ function ViewerPage() {
   };
 
   const exportFirstFramePlane = async () => {
-    if (!pgrScan || !pgrSourceFile || pgrScan.frames.length === 0) {
+    if (!pgrScan || pgrScan.frames.length === 0) {
       log("Queue a PGR stream first.", "error");
       return;
     }
-    const plane = pgrScan.frames[0].planes[0];
-    const blob = pgrSourceFile.slice(plane.offset, plane.offset + plane.size, "image/jpeg");
+    const frame = pgrScan.frames[0];
+    const src = pgrScan.files[frame.fileIndex];
+    const plane = frame.planes[0];
+    const blob = src.slice(plane.offset, plane.offset + plane.size, "image/jpeg");
     downloadFile(blob, `frame0-cam${plane.camera}-plane${plane.plane}.jpg`, "image/jpeg");
     log(`Extracted JPEG payload (${(plane.size / 1024).toFixed(1)} KB) from cam ${plane.camera}.`, "success");
   };
+
 
   return (
     <main className="flex h-screen flex-col bg-background text-foreground">
