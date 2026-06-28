@@ -324,8 +324,8 @@ function ViewerPage() {
                   : "Queue a PGR laser stream or load a survey log to bring the canvas online."}
               </p>
             </div>
-            {pgrScan && pgrSourceFile && pgrScan.frames.length > 0 && (
-              <FramePreview scan={pgrScan} file={pgrSourceFile} />
+            {pgrScan && pgrScan.frames.length > 0 && (
+              <FramePreview scan={pgrScan} />
             )}
           </div>
 
