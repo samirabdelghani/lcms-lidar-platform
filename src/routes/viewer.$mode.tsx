@@ -401,8 +401,8 @@ function RunFilter({
       </Button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-[1001] mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
             <div className="mb-1 flex justify-between gap-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">
               <button
                 className="hover:text-foreground"
@@ -466,8 +466,8 @@ function ExportMenu({
       </Button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-[1001] mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
             <button
               disabled={!hasGps}
               onClick={() => {
@@ -545,8 +545,8 @@ function LayersMenu({
       </Button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-[1001] mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
             {items.map((it) => (
               <label
                 key={it.key}

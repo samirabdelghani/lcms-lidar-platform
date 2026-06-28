@@ -30,8 +30,8 @@ export function QualityMenu({ value, smooth, onSmoothChange, onChange, stats }: 
       </Button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-80 rounded-md border border-border bg-popover p-3 shadow-[var(--shadow-glow)]">
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-[1001] mt-2 w-80 rounded-md border border-border bg-popover p-3 shadow-[var(--shadow-glow)]">
             <div className="mb-3 flex gap-1">
               {Object.entries(PRESETS).map(([name, p]) => (
                 <button
