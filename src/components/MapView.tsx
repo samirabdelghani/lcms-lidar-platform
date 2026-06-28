@@ -1,5 +1,14 @@
 import { useEffect, useMemo } from "react";
-import { MapContainer, TileLayer, Polyline, Marker, useMap, LayersControl } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Polyline,
+  Marker,
+  CircleMarker,
+  useMap,
+  useMapEvents,
+  LayersControl,
+} from "react-leaflet";
 import L from "leaflet";
 import { buildSmoothedSegments, decimateGpsPoints, type Runs } from "@/lib/parsers";
 
@@ -21,6 +30,24 @@ function FitBounds({ runs }: { runs: Runs }) {
   return null;
 }
 
+function ClickHandler({ onClick }: { onClick?: (lat: number, lon: number) => void }) {
+  useMapEvents({
+    click(e) {
+      onClick?.(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
+function PanTo({ pos }: { pos: [number, number] | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!pos) return;
+    map.panTo(pos, { animate: true });
+  }, [pos, map]);
+  return null;
+}
+
 const RUN_COLORS = [
   "#5dbeff", "#7c4dff", "#00c896", "#f5a623",
   "#ff4757", "#22d3ee", "#a78bfa", "#facc15",
@@ -39,6 +66,8 @@ export function MapView({
   smooth = true,
   quality,
   onStats,
+  onMapClick,
+  currentPos,
 }: {
   runs: Runs;
   showTrack: boolean;
@@ -46,6 +75,8 @@ export function MapView({
   smooth?: boolean;
   quality: QualitySettings;
   onStats?: (s: { source: number; rendered: number }) => void;
+  onMapClick?: (lat: number, lon: number) => void;
+  currentPos?: [number, number] | null;
 }) {
   const runList = Object.entries(runs);
 
@@ -95,6 +126,9 @@ export function MapView({
         </LayersControl.BaseLayer>
       </LayersControl>
 
+      <ClickHandler onClick={onMapClick} />
+      <PanTo pos={currentPos ?? null} />
+
       {showTrack &&
         rendered.map(({ id, segments }, runIdx) =>
           segments.map((seg, segIdx) => (
@@ -125,6 +159,19 @@ export function MapView({
             />
           ) : null,
         )}
+
+      {currentPos && (
+        <CircleMarker
+          center={currentPos}
+          radius={9}
+          pathOptions={{
+            color: "#ffffff",
+            weight: 2,
+            fillColor: "#f59e0b",
+            fillOpacity: 1,
+          }}
+        />
+      )}
 
       <FitBounds runs={runs} />
     </MapContainer>

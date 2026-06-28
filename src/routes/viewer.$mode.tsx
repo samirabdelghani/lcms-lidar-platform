@@ -1,5 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
+import JSZip from "jszip";
 import {
   ArrowLeft,
   Database,
@@ -88,6 +89,7 @@ function ViewerPage() {
     maxGapM: 50,
   });
   const [renderStats, setRenderStats] = useState({ source: 0, rendered: 0 });
+  const [frameIdx, setFrameIdx] = useState(0);
 
   const log = useCallback((text: string, level: LogEntry["level"] = "info") => {
     const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
@@ -104,6 +106,59 @@ function ViewerPage() {
   }, [runs, visibleRuns]);
 
   const summary = useMemo(() => summarizeRuns(filteredRuns), [filteredRuns]);
+
+  // Flat ordered list of all visible GPS points (one source of truth for
+  // frame ↔ position mapping and click-to-nearest).
+  const flatGps = useMemo(() => {
+    const out: { lat: number; lon: number; run: number }[] = [];
+    for (const [k, pts] of Object.entries(filteredRuns)) {
+      const run = Number(k);
+      for (const p of pts) out.push({ lat: p.lat, lon: p.lon, run });
+    }
+    return out;
+  }, [filteredRuns]);
+
+  const frameCount = pgrScan?.frames.length ?? 0;
+
+  // Linear time-base mapping: frame i ↔ gps[ round(i/(N-1) * (M-1)) ].
+  const gpsForFrame = useCallback(
+    (idx: number) => {
+      if (!flatGps.length || frameCount === 0) return null;
+      const denom = Math.max(1, frameCount - 1);
+      const gIdx = Math.round((idx / denom) * (flatGps.length - 1));
+      return flatGps[Math.max(0, Math.min(flatGps.length - 1, gIdx))];
+    },
+    [flatGps, frameCount],
+  );
+
+  const currentPos = useMemo<[number, number] | null>(() => {
+    const g = gpsForFrame(frameIdx);
+    return g ? [g.lat, g.lon] : null;
+  }, [gpsForFrame, frameIdx]);
+
+  const handleMapClick = useCallback(
+    (lat: number, lon: number) => {
+      if (!flatGps.length || frameCount === 0) return;
+      let best = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < flatGps.length; i++) {
+        const dLat = flatGps[i].lat - lat;
+        const dLon = flatGps[i].lon - lon;
+        const d = dLat * dLat + dLon * dLon;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      }
+      const denom = Math.max(1, flatGps.length - 1);
+      const fIdx = Math.round((best / denom) * (frameCount - 1));
+      setFrameIdx(Math.max(0, Math.min(frameCount - 1, fIdx)));
+      log(`Jumped to frame ${fIdx + 1} @ ${flatGps[best].lat.toFixed(5)}, ${flatGps[best].lon.toFixed(5)}.`, "success");
+    },
+    [flatGps, frameCount, log],
+  );
+
+
 
   const handleGpsFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -215,6 +270,55 @@ function ViewerPage() {
     log(`Extracted JPEG payload (${(plane.size / 1024).toFixed(1)} KB) from cam ${plane.camera}.`, "success");
   };
 
+  /** ZIP every frame's 6 camera planes + a gps.csv that links each frame to lat/lon. */
+  const exportAllFrames = async () => {
+    if (!pgrScan || pgrScan.frames.length === 0) {
+      log("Queue a PGR stream first.", "error");
+      return;
+    }
+    setBusy(true);
+    setProgress(0);
+    const zip = new JSZip();
+    const csvRows = ["frame,cam,filename,lat,lon,run"];
+    const total = pgrScan.frames.length;
+    log(`Packaging ${total} frames + GPS into ZIP…`);
+    try {
+      for (let i = 0; i < total; i++) {
+        const frame = pgrScan.frames[i];
+        const src = pgrScan.files[frame.fileIndex];
+        const g = gpsForFrame(i);
+        const seen = new Set<number>();
+        for (const p of frame.planes) {
+          if (seen.has(p.camera)) continue;
+          seen.add(p.camera);
+          const fname = `frames/frame${String(i).padStart(5, "0")}_cam${p.camera}.jpg`;
+          const blob = src.slice(p.offset, p.offset + p.size, "image/jpeg");
+          zip.file(fname, blob);
+          csvRows.push(
+            `${i},${p.camera},${fname},${g?.lat ?? ""},${g?.lon ?? ""},${g?.run ?? ""}`,
+          );
+        }
+        if (i % 8 === 0) {
+          setProgress((i / total) * 90);
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }
+      zip.file("gps.csv", csvRows.join("\n"));
+      setProgress(95);
+      const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      downloadFile(blob, `runway-core-frames-${Date.now()}.zip`, "application/zip");
+      setProgress(100);
+      log(`Frame bundle emitted (${total} frames, ${(blob.size / 1e6).toFixed(1)} MB).`, "success");
+    } catch (e) {
+      log(`Bundle failure: ${(e as Error).message}`, "error");
+    } finally {
+      setBusy(false);
+      setTimeout(() => setProgress(0), 800);
+    }
+  };
+
+
+
 
   return (
     <main className="flex h-screen flex-col bg-background text-foreground">
@@ -283,6 +387,7 @@ function ViewerPage() {
             onKml={exportKml}
             onKmz={exportKmz}
             onPgrPlane={exportFirstFramePlane}
+            onAllFrames={exportAllFrames}
             hasGps={Object.keys(filteredRuns).length > 0}
             hasPgr={!!pgrScan && pgrScan.frames.length > 0}
           />
@@ -326,7 +431,11 @@ function ViewerPage() {
               </p>
             </div>
             {pgrScan && pgrScan.frames.length > 0 && (
-              <FramePreview scan={pgrScan} />
+              <FramePreview
+                scan={pgrScan}
+                frameIdx={Math.min(frameIdx, pgrScan.frames.length - 1)}
+                onFrameIdxChange={setFrameIdx}
+              />
             )}
           </div>
 
@@ -355,6 +464,8 @@ function ViewerPage() {
                 smooth={layers.smooth}
                 quality={quality}
                 onStats={setRenderStats}
+                onMapClick={handleMapClick}
+                currentPos={currentPos}
               />
             </Suspense>
             <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-md border border-border bg-background/80 px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider text-muted-foreground backdrop-blur">
@@ -448,6 +559,7 @@ function ExportMenu({
   onKml,
   onKmz,
   onPgrPlane,
+  onAllFrames,
   hasGps,
   hasPgr,
 }: {
@@ -455,6 +567,7 @@ function ExportMenu({
   onKml: () => void;
   onKmz: () => void | Promise<void>;
   onPgrPlane: () => void;
+  onAllFrames: () => void | Promise<void>;
   hasGps: boolean;
   hasPgr: boolean;
 }) {
@@ -509,6 +622,16 @@ function ExportMenu({
               className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               First PGR plane → JPEG
+            </button>
+            <button
+              disabled={!hasPgr}
+              onClick={() => {
+                setOpen(false);
+                void onAllFrames();
+              }}
+              className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              All frames + GPS → ZIP
             </button>
           </div>
         </>
