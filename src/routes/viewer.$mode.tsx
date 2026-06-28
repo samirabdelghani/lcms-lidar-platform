@@ -431,7 +431,11 @@ function ViewerPage() {
               </p>
             </div>
             {pgrScan && pgrScan.frames.length > 0 && (
-              <FramePreview scan={pgrScan} />
+              <FramePreview
+                scan={pgrScan}
+                frameIdx={Math.min(frameIdx, pgrScan.frames.length - 1)}
+                onFrameIdxChange={setFrameIdx}
+              />
             )}
           </div>
 
