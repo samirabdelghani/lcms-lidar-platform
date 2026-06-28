@@ -80,7 +80,6 @@ function ViewerPage() {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [pgrScan, setPgrScan] = useState<PgrScanResult | null>(null);
-  const [pgrSourceFile, setPgrSourceFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pgrInputRef = useRef<HTMLInputElement>(null);
   const [quality, setQuality] = useState<QualitySettings>({
@@ -136,17 +135,17 @@ function ViewerPage() {
 
   const handlePgrFile = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const file = files[0];
+    const arr = Array.from(files);
+    const totalMB = arr.reduce((a, f) => a + f.size, 0) / 1e6;
     setBusy(true);
     setProgress(0);
-    setPgrSourceFile(file);
-    log(`Indexing PGR laser stream: ${file.name} (${(file.size / 1e6).toFixed(2)} MB)`);
+    log(`Indexing ${arr.length} PGR stream(s) · ${totalMB.toFixed(2)} MB total`);
     try {
-      const result = await scanPgrFrames(file, (p) => setProgress(p));
+      const result = await scanPgrFrames(arr, (p) => setProgress(p));
       setPgrScan(result);
       const planeCount = result.frames.reduce((a, f) => a + f.planes.length, 0);
       log(
-        `Mapped ${result.frames.length} frames · ${planeCount} sub-image planes across 6 cameras.`,
+        `Mapped ${result.frames.length} frames · ${planeCount} planes across ${arr.length} file(s).`,
         "success",
       );
     } catch (e) {
@@ -156,6 +155,7 @@ function ViewerPage() {
       setTimeout(() => setProgress(0), 800);
     }
   };
+
 
   const countPts = (r: Runs) => Object.values(r).reduce((a, v) => a + v.length, 0);
 
@@ -203,15 +203,18 @@ function ViewerPage() {
   };
 
   const exportFirstFramePlane = async () => {
-    if (!pgrScan || !pgrSourceFile || pgrScan.frames.length === 0) {
+    if (!pgrScan || pgrScan.frames.length === 0) {
       log("Queue a PGR stream first.", "error");
       return;
     }
-    const plane = pgrScan.frames[0].planes[0];
-    const blob = pgrSourceFile.slice(plane.offset, plane.offset + plane.size, "image/jpeg");
+    const frame = pgrScan.frames[0];
+    const src = pgrScan.files[frame.fileIndex];
+    const plane = frame.planes[0];
+    const blob = src.slice(plane.offset, plane.offset + plane.size, "image/jpeg");
     downloadFile(blob, `frame0-cam${plane.camera}-plane${plane.plane}.jpg`, "image/jpeg");
     log(`Extracted JPEG payload (${(plane.size / 1024).toFixed(1)} KB) from cam ${plane.camera}.`, "success");
   };
+
 
   return (
     <main className="flex h-screen flex-col bg-background text-foreground">
@@ -254,6 +257,7 @@ function ViewerPage() {
           <input
             ref={pgrInputRef}
             type="file"
+            multiple
             hidden
             accept=".pgr,application/octet-stream"
             onChange={(e) => handlePgrFile(e.target.files)}
@@ -321,8 +325,8 @@ function ViewerPage() {
                   : "Queue a PGR laser stream or load a survey log to bring the canvas online."}
               </p>
             </div>
-            {pgrScan && pgrSourceFile && pgrScan.frames.length > 0 && (
-              <FramePreview scan={pgrScan} file={pgrSourceFile} />
+            {pgrScan && pgrScan.frames.length > 0 && (
+              <FramePreview scan={pgrScan} />
             )}
           </div>
 
@@ -398,8 +402,8 @@ function RunFilter({
       </Button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-[1001] mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
             <div className="mb-1 flex justify-between gap-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground">
               <button
                 className="hover:text-foreground"
@@ -463,8 +467,8 @@ function ExportMenu({
       </Button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-[1001] mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
             <button
               disabled={!hasGps}
               onClick={() => {
@@ -542,8 +546,8 @@ function LayersMenu({
       </Button>
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
+          <div className="fixed inset-0 z-[1000]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-[1001] mt-2 w-56 rounded-md border border-border bg-popover p-2 shadow-[var(--shadow-glow)]">
             {items.map((it) => (
               <label
                 key={it.key}
