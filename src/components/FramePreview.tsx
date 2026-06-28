@@ -4,6 +4,8 @@ import type { PgrScanResult } from "@/lib/parsers";
 
 interface Props {
   scan: PgrScanResult;
+  frameIdx: number;
+  onFrameIdxChange: (idx: number) => void;
 }
 
 interface PlaneImg {
@@ -12,12 +14,63 @@ interface PlaneImg {
   size: number;
 }
 
-export function FramePreview({ scan }: Props) {
-  const [frameIdx, setFrameIdx] = useState(0);
+/**
+ * Draws a JPEG plane to a canvas and applies an auto-contrast stretch so dim
+ * 8-bit plane payloads (which look near-black raw) become a visible monochrome
+ * road image. Returns the canvas dataURL on success, or null on decode failure.
+ */
+async function renderPlaneAutoContrast(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (!w || !h) return resolve(null);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, w, h);
+        const px = data.data;
+        // Auto-levels on luminance (sample every 16th px for speed)
+        let lo = 255;
+        let hi = 0;
+        for (let i = 0; i < px.length; i += 64) {
+          const v = px[i];
+          if (v < lo) lo = v;
+          if (v > hi) hi = v;
+        }
+        if (hi <= lo) hi = lo + 1;
+        const scale = 255 / (hi - lo);
+        const gamma = 0.85;
+        for (let i = 0; i < px.length; i += 4) {
+          let v = (px[i] - lo) * scale;
+          if (v < 0) v = 0;
+          else if (v > 255) v = 255;
+          v = Math.pow(v / 255, gamma) * 255;
+          px[i] = px[i + 1] = px[i + 2] = v;
+          px[i + 3] = 255;
+        }
+        ctx.putImageData(data, 0, 0);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+export function FramePreview({ scan, frameIdx, onFrameIdxChange }: Props) {
   const [imgs, setImgs] = useState<PlaneImg[]>([]);
+  const [renders, setRenders] = useState<Record<number, string | null>>({});
   const [playing, setPlaying] = useState(false);
   const [fps, setFps] = useState(8);
-  const [decodeErrors, setDecodeErrors] = useState<Set<number>>(new Set());
   const timerRef = useRef<number | null>(null);
 
   const frame = useMemo(() => scan.frames[frameIdx], [scan, frameIdx]);
@@ -26,7 +79,6 @@ export function FramePreview({ scan }: Props) {
     [frame, scan.files],
   );
 
-  // Build object URLs for each camera (one plane per cam)
   useEffect(() => {
     if (!frame || !srcFile) return;
     const created: PlaneImg[] = [];
@@ -43,11 +95,27 @@ export function FramePreview({ scan }: Props) {
     }
     created.sort((a, b) => a.camera - b.camera);
     setImgs(created);
-    setDecodeErrors(new Set());
-    return () => created.forEach((i) => URL.revokeObjectURL(i.url));
+    setRenders({});
+
+    // Auto-contrast each plane in parallel
+    let cancelled = false;
+    Promise.all(
+      created.map((img) =>
+        renderPlaneAutoContrast(img.url).then((res) => ({ cam: img.camera, res })),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      const map: Record<number, string | null> = {};
+      for (const r of results) map[r.cam] = r.res;
+      setRenders(map);
+    });
+
+    return () => {
+      cancelled = true;
+      created.forEach((i) => URL.revokeObjectURL(i.url));
+    };
   }, [frame, srcFile]);
 
-  // Play loop
   useEffect(() => {
     if (!playing) {
       if (timerRef.current) window.clearInterval(timerRef.current);
@@ -55,19 +123,17 @@ export function FramePreview({ scan }: Props) {
       return;
     }
     timerRef.current = window.setInterval(() => {
-      setFrameIdx((i) => {
-        const next = i + 1;
-        if (next >= scan.frames.length) {
-          setPlaying(false);
-          return i;
-        }
-        return next;
-      });
+      const next = frameIdx + 1;
+      if (next >= scan.frames.length) {
+        setPlaying(false);
+      } else {
+        onFrameIdxChange(next);
+      }
     }, Math.max(50, 1000 / fps));
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [playing, fps, scan.frames.length]);
+  }, [playing, fps, frameIdx, scan.frames.length, onFrameIdxChange]);
 
   if (!frame) return null;
 
@@ -76,7 +142,7 @@ export function FramePreview({ scan }: Props) {
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => setFrameIdx(0)}
+          onClick={() => onFrameIdxChange(0)}
           className="rounded border border-border bg-background/60 p-1.5 text-muted-foreground hover:text-foreground"
           title="First frame"
         >
@@ -92,7 +158,7 @@ export function FramePreview({ scan }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => setFrameIdx(scan.frames.length - 1)}
+          onClick={() => onFrameIdxChange(scan.frames.length - 1)}
           className="rounded border border-border bg-background/60 p-1.5 text-muted-foreground hover:text-foreground"
           title="Last frame"
         >
@@ -106,7 +172,7 @@ export function FramePreview({ scan }: Props) {
           min={0}
           max={scan.frames.length - 1}
           value={frameIdx}
-          onChange={(e) => setFrameIdx(parseInt(e.target.value, 10))}
+          onChange={(e) => onFrameIdxChange(parseInt(e.target.value, 10))}
           className="flex-1 accent-[color:var(--accent)]"
         />
         <span className="font-mono text-[11px] text-foreground">
@@ -130,31 +196,33 @@ export function FramePreview({ scan }: Props) {
       <div className="grid grid-cols-6 gap-2">
         {Array.from({ length: 6 }).map((_, cam) => {
           const img = imgs.find((i) => i.camera === cam);
-          const failed = decodeErrors.has(cam);
+          const rendered = renders[cam];
+          // rendered === undefined → still processing; null → decode failed
+          const showRaw = img && rendered === undefined;
+          const showAuto = img && rendered;
+          const failed = img && rendered === null;
           return (
             <div
               key={cam}
-              className="relative aspect-[4/3] overflow-hidden rounded border border-border bg-black/40"
+              className="relative aspect-[4/3] overflow-hidden rounded border border-border bg-neutral-900"
             >
-              {img && !failed && (
+              {showAuto && (
                 <img
-                  src={img.url}
+                  src={rendered!}
                   alt={`Cam ${cam}`}
                   className="size-full object-cover"
-                  onError={() =>
-                    setDecodeErrors((s) => {
-                      const next = new Set(s);
-                      next.add(cam);
-                      return next;
-                    })
-                  }
+                />
+              )}
+              {showRaw && (
+                <img
+                  src={img!.url}
+                  alt={`Cam ${cam} raw`}
+                  className="size-full object-cover opacity-60"
                 />
               )}
               {(failed || !img) && (
                 <div className="absolute inset-0 grid place-items-center px-2 text-center font-mono text-[9px] leading-tight text-muted-foreground">
-                  {img
-                    ? "JPEG12 payload · browser cannot decode 12-bit baseline. Export raw plane to view in external tool."
-                    : "no data"}
+                  {img ? "12-bit baseline · decoder-bound" : "no data"}
                 </div>
               )}
               <div className="absolute left-1 top-1 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
