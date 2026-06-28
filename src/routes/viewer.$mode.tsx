@@ -623,6 +623,16 @@ function ExportMenu({
             >
               First PGR plane → JPEG
             </button>
+            <button
+              disabled={!hasPgr}
+              onClick={() => {
+                setOpen(false);
+                void onAllFrames();
+              }}
+              className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              All frames + GPS → ZIP
+            </button>
           </div>
         </>
       )}
