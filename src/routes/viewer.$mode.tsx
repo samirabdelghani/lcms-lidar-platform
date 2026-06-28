@@ -107,6 +107,59 @@ function ViewerPage() {
 
   const summary = useMemo(() => summarizeRuns(filteredRuns), [filteredRuns]);
 
+  // Flat ordered list of all visible GPS points (one source of truth for
+  // frame ↔ position mapping and click-to-nearest).
+  const flatGps = useMemo(() => {
+    const out: { lat: number; lon: number; run: number }[] = [];
+    for (const [k, pts] of Object.entries(filteredRuns)) {
+      const run = Number(k);
+      for (const p of pts) out.push({ lat: p.lat, lon: p.lon, run });
+    }
+    return out;
+  }, [filteredRuns]);
+
+  const frameCount = pgrScan?.frames.length ?? 0;
+
+  // Linear time-base mapping: frame i ↔ gps[ round(i/(N-1) * (M-1)) ].
+  const gpsForFrame = useCallback(
+    (idx: number) => {
+      if (!flatGps.length || frameCount === 0) return null;
+      const denom = Math.max(1, frameCount - 1);
+      const gIdx = Math.round((idx / denom) * (flatGps.length - 1));
+      return flatGps[Math.max(0, Math.min(flatGps.length - 1, gIdx))];
+    },
+    [flatGps, frameCount],
+  );
+
+  const currentPos = useMemo<[number, number] | null>(() => {
+    const g = gpsForFrame(frameIdx);
+    return g ? [g.lat, g.lon] : null;
+  }, [gpsForFrame, frameIdx]);
+
+  const handleMapClick = useCallback(
+    (lat: number, lon: number) => {
+      if (!flatGps.length || frameCount === 0) return;
+      let best = 0;
+      let bestD = Infinity;
+      for (let i = 0; i < flatGps.length; i++) {
+        const dLat = flatGps[i].lat - lat;
+        const dLon = flatGps[i].lon - lon;
+        const d = dLat * dLat + dLon * dLon;
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      }
+      const denom = Math.max(1, flatGps.length - 1);
+      const fIdx = Math.round((best / denom) * (frameCount - 1));
+      setFrameIdx(Math.max(0, Math.min(frameCount - 1, fIdx)));
+      log(`Jumped to frame ${fIdx + 1} @ ${flatGps[best].lat.toFixed(5)}, ${flatGps[best].lon.toFixed(5)}.`, "success");
+    },
+    [flatGps, frameCount, log],
+  );
+
+
+
   const handleGpsFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setBusy(true);
