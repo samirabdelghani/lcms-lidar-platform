@@ -321,78 +321,82 @@ const PGR_CAFEBABE = 0xcafebabe;
  * scan_pgr_frames_optimized from the desktop viewer.
  */
 export async function scanPgrFrames(
-  file: File,
+  files: File | File[],
   onProgress?: (pct: number) => void,
 ): Promise<PgrScanResult> {
-  const buf = new Uint8Array(await file.arrayBuffer());
-  const view = new DataView(buf.buffer);
-  const total = buf.length;
+  const fileList = Array.isArray(files) ? files : [files];
+  const totalBytes = fileList.reduce((a, f) => a + f.size, 0);
   const frames: PgrFrame[] = [];
-  let pos = 0;
-  let lastReport = 0;
+  let cumulativeBytes = 0;
 
-  while (pos < total - 4) {
-    // Find next 0xCAFEBABE marker (big-endian on disk)
-    let idx = -1;
-    for (let i = pos; i < total - 4; i++) {
-      if (
-        buf[i] === 0xca &&
-        buf[i + 1] === 0xfe &&
-        buf[i + 2] === 0xba &&
-        buf[i + 3] === 0xbe
-      ) {
-        idx = i;
-        break;
+  for (let fIdx = 0; fIdx < fileList.length; fIdx++) {
+    const file = fileList[fIdx];
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const view = new DataView(buf.buffer);
+    const total = buf.length;
+    let pos = 0;
+    let lastReport = 0;
+
+    while (pos < total - 4) {
+      let idx = -1;
+      for (let i = pos; i < total - 4; i++) {
+        if (
+          buf[i] === 0xca &&
+          buf[i + 1] === 0xfe &&
+          buf[i + 2] === 0xba &&
+          buf[i + 3] === 0xbe
+        ) {
+          idx = i;
+          break;
+        }
+        if (onProgress && i - lastReport > 8_000_000) {
+          lastReport = i;
+          onProgress(Math.min(99, ((cumulativeBytes + i) / totalBytes) * 100));
+          await new Promise((r) => setTimeout(r, 0));
+        }
       }
-      if (onProgress && i - lastReport > 8_000_000) {
-        lastReport = i;
-        onProgress(Math.min(99, (i / total) * 100));
-        // Yield to UI
-        await new Promise((r) => setTimeout(r, 0));
+      if (idx === -1) break;
+
+      const frameStart = idx - 16;
+      if (frameStart < 0 || frameStart + PGR_FRAME_HEADER_SIZE > total) {
+        pos = idx + 4;
+        continue;
       }
-    }
-    if (idx === -1) break;
+      if (view.getUint32(frameStart + 16, false) !== PGR_CAFEBABE) {
+        pos = idx + 4;
+        continue;
+      }
 
-    const frameStart = idx - 16;
-    if (frameStart < 0 || frameStart + PGR_FRAME_HEADER_SIZE > total) {
+      const tableBase = frameStart + PGR_IMAGE_TABLE_OFFSET;
+      const planes: PgrPlane[] = [];
+      for (let i = 0; i < PGR_MAX_SUBIMAGES; i++) {
+        const entry = tableBase + i * 8;
+        if (entry + 8 > total) break;
+        const imgOff = view.getUint32(entry, false);
+        const imgSize = view.getUint32(entry + 4, false);
+        if (imgSize < PGR_MIN_SUBIMAGE_BYTES) continue;
+        const absStart = frameStart + imgOff;
+        const absEnd = absStart + imgSize;
+        if (absEnd > total) continue;
+        if (buf[absStart] !== 0xff || buf[absStart + 1] !== 0xd8) continue;
+        planes.push({
+          camera: Math.floor(i / PGR_PLANES_PER_CAMERA),
+          plane: i % PGR_PLANES_PER_CAMERA,
+          offset: absStart,
+          size: imgSize,
+        });
+      }
+
+      if (planes.length >= PGR_PLANES_PER_CAMERA) {
+        frames.push({ frameStart, planes, fileIndex: fIdx, fileName: file.name });
+      }
       pos = idx + 4;
-      continue;
     }
-    // Validate big-endian signature at frameStart + 16
-    if (view.getUint32(frameStart + 16, false) !== PGR_CAFEBABE) {
-      pos = idx + 4;
-      continue;
-    }
-
-    const tableBase = frameStart + PGR_IMAGE_TABLE_OFFSET;
-    const planes: PgrPlane[] = [];
-    for (let i = 0; i < PGR_MAX_SUBIMAGES; i++) {
-      const entry = tableBase + i * 8;
-      if (entry + 8 > total) break;
-      const imgOff = view.getUint32(entry, false);
-      const imgSize = view.getUint32(entry + 4, false);
-      if (imgSize < PGR_MIN_SUBIMAGE_BYTES) continue;
-      const absStart = frameStart + imgOff;
-      const absEnd = absStart + imgSize;
-      if (absEnd > total) continue;
-      // JPEG SOI marker
-      if (buf[absStart] !== 0xff || buf[absStart + 1] !== 0xd8) continue;
-      planes.push({
-        camera: Math.floor(i / PGR_PLANES_PER_CAMERA),
-        plane: i % PGR_PLANES_PER_CAMERA,
-        offset: absStart,
-        size: imgSize,
-      });
-    }
-
-    if (planes.length >= PGR_PLANES_PER_CAMERA) {
-      frames.push({ frameStart, planes });
-    }
-    pos = idx + 4;
+    cumulativeBytes += total;
   }
 
   onProgress?.(100);
-  return { frames, fileSize: total };
+  return { frames, fileSize: totalBytes, files: fileList };
 }
 
 /** Extract the raw JPEG bytes for a single plane from the underlying file. */
