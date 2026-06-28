@@ -464,6 +464,8 @@ function ViewerPage() {
                 smooth={layers.smooth}
                 quality={quality}
                 onStats={setRenderStats}
+                onMapClick={handleMapClick}
+                currentPos={currentPos}
               />
             </Suspense>
             <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-md border border-border bg-background/80 px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider text-muted-foreground backdrop-blur">
