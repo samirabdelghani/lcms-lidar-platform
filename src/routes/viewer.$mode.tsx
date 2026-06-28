@@ -135,17 +135,17 @@ function ViewerPage() {
 
   const handlePgrFile = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const file = files[0];
+    const arr = Array.from(files);
+    const totalMB = arr.reduce((a, f) => a + f.size, 0) / 1e6;
     setBusy(true);
     setProgress(0);
-    setPgrSourceFile(file);
-    log(`Indexing PGR laser stream: ${file.name} (${(file.size / 1e6).toFixed(2)} MB)`);
+    log(`Indexing ${arr.length} PGR stream(s) · ${totalMB.toFixed(2)} MB total`);
     try {
-      const result = await scanPgrFrames(file, (p) => setProgress(p));
+      const result = await scanPgrFrames(arr, (p) => setProgress(p));
       setPgrScan(result);
       const planeCount = result.frames.reduce((a, f) => a + f.planes.length, 0);
       log(
-        `Mapped ${result.frames.length} frames · ${planeCount} sub-image planes across 6 cameras.`,
+        `Mapped ${result.frames.length} frames · ${planeCount} planes across ${arr.length} file(s).`,
         "success",
       );
     } catch (e) {
@@ -155,6 +155,7 @@ function ViewerPage() {
       setTimeout(() => setProgress(0), 800);
     }
   };
+
 
   const countPts = (r: Runs) => Object.values(r).reduce((a, v) => a + v.length, 0);
 
