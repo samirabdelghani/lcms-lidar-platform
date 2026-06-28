@@ -27,11 +27,16 @@ export interface PgrFrame {
   frameStart: number;
   /** Decoded planes (one entry per detected sub-image) */
   planes: PgrPlane[];
+  /** Index into PgrScanResult.files identifying the source file */
+  fileIndex: number;
+  /** Source filename (for display) */
+  fileName: string;
 }
 
 export interface PgrScanResult {
   frames: PgrFrame[];
   fileSize: number;
+  files: File[];
 }
 
 // ─── GPS helpers ──────────────────────────────────────────────
