@@ -559,6 +559,7 @@ function ExportMenu({
   onKml,
   onKmz,
   onPgrPlane,
+  onAllFrames,
   hasGps,
   hasPgr,
 }: {
@@ -566,6 +567,7 @@ function ExportMenu({
   onKml: () => void;
   onKmz: () => void | Promise<void>;
   onPgrPlane: () => void;
+  onAllFrames: () => void | Promise<void>;
   hasGps: boolean;
   hasPgr: boolean;
 }) {
