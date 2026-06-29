@@ -19,7 +19,7 @@ function getModule(): Promise<any> {
       printErr: () => undefined,
     });
   }
-  return modulePromise;
+  return modulePromise!;
 }
 
 export interface DecodedPlane {
@@ -81,7 +81,9 @@ function errorText(e: unknown): string {
 }
 
 async function decodeBrowserJpeg(buf: Uint8Array): Promise<DecodedPlane> {
-  const blob = new Blob([buf], { type: "image/jpeg" });
+  const blob = new Blob([buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer], {
+    type: "image/jpeg",
+  });
   const bitmap = await createImageBitmap(blob);
   try {
     const canvas = document.createElement("canvas");
@@ -220,7 +222,7 @@ function rgbaToDataUrl(rgba: Uint8ClampedArray, w: number, h: number): string | 
   canvas.height = h;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba), w, h), 0, 0);
   return canvas.toDataURL("image/jpeg", 0.88);
 }
 
