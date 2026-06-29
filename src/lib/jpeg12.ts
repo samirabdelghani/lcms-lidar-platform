@@ -74,6 +74,24 @@ function jpegPrecision(buf: Uint8Array): number | null {
   return null;
 }
 
+function normalizeJpegPayload(buf: Uint8Array): Uint8Array {
+  let start = 0;
+  while (start + 1 < buf.length && (buf[start] !== 0xff || buf[start + 1] !== 0xd8)) start++;
+  if (start > 0 && start + 1 < buf.length) buf = buf.subarray(start);
+
+  // Some PGR sub-image sizes include padding after the JPEG EOI; others are
+  // truncated without a final EOI. Browser decoders and libjpeg-turbo are both
+  // happier when the payload is normalized to exactly one JPEG stream.
+  for (let i = buf.length - 2; i >= 2; i--) {
+    if (buf[i] === 0xff && buf[i + 1] === 0xd9) return buf.subarray(0, i + 2);
+  }
+  const withEoi = new Uint8Array(buf.length + 2);
+  withEoi.set(buf);
+  withEoi[withEoi.length - 2] = 0xff;
+  withEoi[withEoi.length - 1] = 0xd9;
+  return withEoi;
+}
+
 function errorText(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (typeof e === "object" && e && "message" in e) return String((e as { message: unknown }).message);
@@ -110,6 +128,7 @@ async function decodeBrowserJpeg(buf: Uint8Array): Promise<DecodedPlane> {
 }
 
 export async function decodeJpegBuffer(buf: Uint8Array): Promise<DecodedPlane> {
+  buf = normalizeJpegPayload(buf);
   const precision = jpegPrecision(buf);
   if (precision !== null && precision <= 8) return decodeBrowserJpeg(buf);
 
