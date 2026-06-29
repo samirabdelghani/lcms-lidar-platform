@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -39,12 +39,20 @@ function ClickHandler({ onClick }: { onClick?: (lat: number, lon: number) => voi
   return null;
 }
 
-function PanTo({ pos }: { pos: [number, number] | null }) {
+function PanTo({ pos, follow }: { pos: [number, number] | null; follow: boolean }) {
   const map = useMap();
+  const raf = useRef<number | null>(null);
   useEffect(() => {
     if (!pos) return;
-    map.panTo(pos, { animate: true });
-  }, [pos, map]);
+    if (raf.current) cancelAnimationFrame(raf.current);
+    raf.current = requestAnimationFrame(() => {
+      if (follow) map.panTo(pos, { animate: false, noMoveStart: true });
+      else map.panTo(pos, { animate: true, duration: 0.35 });
+    });
+    return () => {
+      if (raf.current) cancelAnimationFrame(raf.current);
+    };
+  }, [pos, follow, map]);
   return null;
 }
 
@@ -68,6 +76,7 @@ export function MapView({
   onStats,
   onMapClick,
   currentPos,
+  followCurrent = false,
 }: {
   runs: Runs;
   showTrack: boolean;
@@ -77,6 +86,7 @@ export function MapView({
   onStats?: (s: { source: number; rendered: number }) => void;
   onMapClick?: (lat: number, lon: number) => void;
   currentPos?: [number, number] | null;
+  followCurrent?: boolean;
 }) {
   const runList = Object.entries(runs);
 
@@ -127,7 +137,7 @@ export function MapView({
       </LayersControl>
 
       <ClickHandler onClick={onMapClick} />
-      <PanTo pos={currentPos ?? null} />
+      <PanTo pos={currentPos ?? null} follow={followCurrent} />
 
       {showTrack &&
         rendered.map(({ id, segments }, runIdx) =>
@@ -160,17 +170,49 @@ export function MapView({
           ) : null,
         )}
 
+      {showNodes &&
+        rendered.map(({ id, decimated }, runIdx) =>
+          decimated.map((p, idx) =>
+            idx % Math.max(1, Math.ceil(decimated.length / 400)) === 0 ? (
+              <CircleMarker
+                key={`pt-${id}-${idx}`}
+                center={[p.lat, p.lon]}
+                radius={4}
+                eventHandlers={{ click: () => onMapClick?.(p.lat, p.lon) }}
+                pathOptions={{
+                  color: RUN_COLORS[runIdx % RUN_COLORS.length],
+                  weight: 1,
+                  fillColor: "#ffffff",
+                  fillOpacity: 0.85,
+                }}
+              />
+            ) : null,
+          ),
+        )}
+
       {currentPos && (
-        <CircleMarker
-          center={currentPos}
-          radius={9}
-          pathOptions={{
-            color: "#ffffff",
-            weight: 2,
-            fillColor: "#f59e0b",
-            fillOpacity: 1,
-          }}
-        />
+        <>
+          <CircleMarker
+            center={currentPos}
+            radius={followCurrent ? 18 : 13}
+            pathOptions={{
+              color: "#f59e0b",
+              weight: 2,
+              fillColor: "#f59e0b",
+              fillOpacity: followCurrent ? 0.16 : 0.08,
+            }}
+          />
+          <CircleMarker
+            center={currentPos}
+            radius={8}
+            pathOptions={{
+              color: "#ffffff",
+              weight: 2,
+              fillColor: "#f59e0b",
+              fillOpacity: 1,
+            }}
+          />
+        </>
       )}
 
       <FitBounds runs={runs} />

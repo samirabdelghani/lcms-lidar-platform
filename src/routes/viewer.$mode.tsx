@@ -31,6 +31,7 @@ import { Console, type LogEntry } from "@/components/Console";
 import { FramePreview } from "@/components/FramePreview";
 import { QualityMenu } from "@/components/QualityMenu";
 import type { QualitySettings } from "@/components/MapView";
+import { decodeCameraToDataUrl } from "@/lib/jpeg12";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -91,6 +92,7 @@ function ViewerPage() {
   const [renderStats, setRenderStats] = useState({ source: 0, rendered: 0 });
   const [frameIdx, setFrameIdx] = useState(0);
   const [playhead, setPlayhead] = useState(0); // fractional frame index for smooth marker
+  const [drivePlaying, setDrivePlaying] = useState(false);
 
   const log = useCallback((text: string, level: LogEntry["level"] = "info") => {
     const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
@@ -270,6 +272,8 @@ function ViewerPage() {
     log(`GPS export → KMZ emitted (${countPts(out)} pts).`, "success");
   };
 
+  const dataUrlToBlob = async (url: string) => (await fetch(url)).blob();
+
   const exportFirstFramePlane = async () => {
     if (!pgrScan || pgrScan.frames.length === 0) {
       log("Queue a PGR stream first.", "error");
@@ -283,7 +287,7 @@ function ViewerPage() {
     log(`Extracted JPEG payload (${(plane.size / 1024).toFixed(1)} KB) from cam ${plane.camera}.`, "success");
   };
 
-  /** ZIP every frame's 6 camera planes + a gps.csv that links each frame to lat/lon. */
+  /** ZIP every rendered RGB road camera view + a gps.csv that links each frame to lat/lon. */
   const exportAllFrames = async () => {
     if (!pgrScan || pgrScan.frames.length === 0) {
       log("Queue a PGR stream first.", "error");
@@ -292,7 +296,7 @@ function ViewerPage() {
     setBusy(true);
     setProgress(0);
     const zip = new JSZip();
-    const csvRows = ["frame,cam,filename,lat,lon,run"];
+    const csvRows = ["frame,cam,filename,lat,lon,run,status"];
     const total = pgrScan.frames.length;
     log(`Packaging ${total} frames + GPS into ZIP…`);
     try {
@@ -300,18 +304,32 @@ function ViewerPage() {
         const frame = pgrScan.frames[i];
         const src = pgrScan.files[frame.fileIndex];
         const g = gpsForFrame(i);
-        const seen = new Set<number>();
-        for (const p of frame.planes) {
-          if (seen.has(p.camera)) continue;
-          seen.add(p.camera);
-          const fname = `frames/frame${String(i).padStart(5, "0")}_cam${p.camera}.jpg`;
-          const blob = src.slice(p.offset, p.offset + p.size, "image/jpeg");
-          zip.file(fname, blob);
+        for (let cam = 0; cam < 6; cam++) {
+          const planes = frame.planes
+            .filter((p) => p.camera === cam)
+            .sort((a, b) => a.plane - b.plane)
+            .slice(0, 4);
+          if (planes.length === 0) continue;
+          const fname = `frames/frame${String(i).padStart(5, "0")}_cam${cam}_road.jpg`;
+          let status = "decoded-rgb";
+          try {
+            const buffers = await Promise.all(
+              planes.map(async (p) => new Uint8Array(await src.slice(p.offset, p.offset + p.size).arrayBuffer())),
+            );
+            const rendered = await decodeCameraToDataUrl(buffers);
+            if (rendered.url) {
+              zip.file(fname, await dataUrlToBlob(rendered.url));
+            } else {
+              status = `decode-failed:${rendered.error ?? "unknown"}`;
+            }
+          } catch (e) {
+            status = `decode-failed:${(e as Error).message}`;
+          }
           csvRows.push(
-            `${i},${p.camera},${fname},${g?.lat ?? ""},${g?.lon ?? ""},${g?.run ?? ""}`,
+            `${i},${cam},${fname},${g?.lat ?? ""},${g?.lon ?? ""},${g?.run ?? ""},"${status.replace(/"/g, "'")}"`,
           );
         }
-        if (i % 8 === 0) {
+        if (i % 2 === 0) {
           setProgress((i / total) * 90);
           await new Promise((r) => setTimeout(r, 0));
         }
@@ -321,7 +339,7 @@ function ViewerPage() {
       const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
       downloadFile(blob, `runway-core-frames-${Date.now()}.zip`, "application/zip");
       setProgress(100);
-      log(`Frame bundle emitted (${total} frames, ${(blob.size / 1e6).toFixed(1)} MB).`, "success");
+      log(`Rendered road-image bundle emitted (${total} frames, ${(blob.size / 1e6).toFixed(1)} MB).`, "success");
     } catch (e) {
       log(`Bundle failure: ${(e as Error).message}`, "error");
     } finally {
@@ -452,6 +470,7 @@ function ViewerPage() {
                   setPlayhead(i);
                 }}
                 onPlayheadChange={setPlayhead}
+                onPlayingChange={setDrivePlaying}
               />
             )}
           </div>
@@ -483,6 +502,7 @@ function ViewerPage() {
                 onStats={setRenderStats}
                 onMapClick={handleMapClick}
                 currentPos={currentPos}
+                followCurrent={drivePlaying}
               />
             </Suspense>
             <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-md border border-border bg-background/80 px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider text-muted-foreground backdrop-blur">
