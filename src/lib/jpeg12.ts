@@ -7,7 +7,7 @@
 import libjpegturbo12wasm from "@cornerstonejs/codec-libjpeg-turbo-12bit/dist/libjpegturbo12wasm.js";
 import wasmUrl from "@cornerstonejs/codec-libjpeg-turbo-12bit/dist/libjpegturbo12wasm.wasm?url";
 
-let modulePromise: Promise<any> | null = null;
+let modulePromise: Promise<any> | undefined;
 
 function getModule(): Promise<any> {
   if (!modulePromise) {
@@ -15,7 +15,7 @@ function getModule(): Promise<any> {
       locateFile: (p: string) => (p.endsWith(".wasm") ? wasmUrl : p),
     });
   }
-  return modulePromise;
+  return modulePromise!;
 }
 
 export interface DecodedPlane {
