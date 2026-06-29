@@ -91,6 +91,7 @@ function ViewerPage() {
   const [renderStats, setRenderStats] = useState({ source: 0, rendered: 0 });
   const [frameIdx, setFrameIdx] = useState(0);
   const [playhead, setPlayhead] = useState(0); // fractional frame index for smooth marker
+  const [drivePlaying, setDrivePlaying] = useState(false);
 
   const log = useCallback((text: string, level: LogEntry["level"] = "info") => {
     const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
@@ -452,6 +453,7 @@ function ViewerPage() {
                   setPlayhead(i);
                 }}
                 onPlayheadChange={setPlayhead}
+                onPlayingChange={setDrivePlaying}
               />
             )}
           </div>
@@ -483,6 +485,7 @@ function ViewerPage() {
                 onStats={setRenderStats}
                 onMapClick={handleMapClick}
                 currentPos={currentPos}
+                followCurrent={drivePlaying}
               />
             </Suspense>
             <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-md border border-border bg-background/80 px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider text-muted-foreground backdrop-blur">
