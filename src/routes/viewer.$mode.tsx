@@ -90,6 +90,7 @@ function ViewerPage() {
   });
   const [renderStats, setRenderStats] = useState({ source: 0, rendered: 0 });
   const [frameIdx, setFrameIdx] = useState(0);
+  const [playhead, setPlayhead] = useState(0); // fractional frame index for smooth marker
 
   const log = useCallback((text: string, level: LogEntry["level"] = "info") => {
     const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
@@ -131,10 +132,20 @@ function ViewerPage() {
     [flatGps, frameCount],
   );
 
+  // Smooth interpolated marker position: maps fractional playhead to a
+  // fractional GPS index and lerps between the two surrounding points so the
+  // marker glides along the road instead of snapping per-frame.
   const currentPos = useMemo<[number, number] | null>(() => {
-    const g = gpsForFrame(frameIdx);
-    return g ? [g.lat, g.lon] : null;
-  }, [gpsForFrame, frameIdx]);
+    if (!flatGps.length || frameCount === 0) return null;
+    const denom = Math.max(1, frameCount - 1);
+    const gFloat = (playhead / denom) * (flatGps.length - 1);
+    const i0 = Math.max(0, Math.min(flatGps.length - 1, Math.floor(gFloat)));
+    const i1 = Math.min(flatGps.length - 1, i0 + 1);
+    const t = gFloat - i0;
+    const a = flatGps[i0];
+    const b = flatGps[i1];
+    return [a.lat + (b.lat - a.lat) * t, a.lon + (b.lon - a.lon) * t];
+  }, [flatGps, frameCount, playhead]);
 
   const handleMapClick = useCallback(
     (lat: number, lon: number) => {
