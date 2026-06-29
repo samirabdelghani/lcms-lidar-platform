@@ -439,7 +439,7 @@ function ViewerPage() {
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 {pgrScan
-                  ? `First frame @ byte 0x${pgrScan.frames[0]?.frameStart.toString(16).toUpperCase() ?? "—"}. JPEG12 imagery decode is decoder-bound; export raw plane payloads via the export menu.`
+                  ? `First frame @ byte 0x${pgrScan.frames[0]?.frameStart.toString(16).toUpperCase() ?? "—"}. JPEG12 decoder online — click any point on the map to jump there, or press play to drive the GPS marker along the road.`
                   : "Queue a PGR laser stream or load a survey log to bring the canvas online."}
               </p>
             </div>
@@ -447,7 +447,11 @@ function ViewerPage() {
               <FramePreview
                 scan={pgrScan}
                 frameIdx={Math.min(frameIdx, pgrScan.frames.length - 1)}
-                onFrameIdxChange={setFrameIdx}
+                onFrameIdxChange={(i) => {
+                  setFrameIdx(i);
+                  setPlayhead(i);
+                }}
+                onPlayheadChange={setPlayhead}
               />
             )}
           </div>
