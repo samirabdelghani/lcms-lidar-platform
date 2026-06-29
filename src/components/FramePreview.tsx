@@ -172,8 +172,8 @@ export function FramePreview({
   if (!frame) return null;
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[5] border-t border-border bg-background/96 p-3 backdrop-blur-xl">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+    <div className="absolute inset-0 z-[5] flex flex-col border-t border-border bg-background/96 p-3 backdrop-blur-xl">
+      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => jumpTo(0)}
@@ -249,9 +249,9 @@ export function FramePreview({
       </div>
 
       {viewMode === "focus" ? (
-        <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_180px]">
+        <div className="grid min-h-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1fr)_190px]">
           <RoadTile slot={focusSlot} large />
-          <div className="grid grid-cols-3 gap-2 lg:grid-cols-2">
+          <div className="grid min-h-0 grid-cols-3 gap-2 lg:grid-cols-2">
             {slots.map((slot) => (
               <button
                 key={slot.camera}
@@ -265,7 +265,7 @@ export function FramePreview({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-6 gap-2">
+        <div className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-2">
           {slots.map((slot) => (
             <RoadTile key={slot.camera} slot={slot} />
           ))}
@@ -279,7 +279,7 @@ function RoadTile({ slot, large = false, compact = false }: { slot?: CameraSlot;
   const cam = slot?.camera ?? 0;
   return (
     <div
-      className={`relative overflow-hidden rounded border border-border bg-neutral-950 ${large ? "h-[260px]" : "aspect-[4/3]"}`}
+      className={`relative overflow-hidden rounded border border-border bg-neutral-950 ${large ? "h-full min-h-0" : "aspect-[4/3]"}`}
     >
       {slot?.url && (
         <img
