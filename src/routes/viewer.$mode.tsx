@@ -163,7 +163,9 @@ function ViewerPage() {
       }
       const denom = Math.max(1, flatGps.length - 1);
       const fIdx = Math.round((best / denom) * (frameCount - 1));
-      setFrameIdx(Math.max(0, Math.min(frameCount - 1, fIdx)));
+      const clamped = Math.max(0, Math.min(frameCount - 1, fIdx));
+      setFrameIdx(clamped);
+      setPlayhead(clamped);
       log(`Jumped to frame ${fIdx + 1} @ ${flatGps[best].lat.toFixed(5)}, ${flatGps[best].lon.toFixed(5)}.`, "success");
     },
     [flatGps, frameCount, log],
