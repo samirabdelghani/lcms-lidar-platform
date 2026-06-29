@@ -90,6 +90,7 @@ function ViewerPage() {
   });
   const [renderStats, setRenderStats] = useState({ source: 0, rendered: 0 });
   const [frameIdx, setFrameIdx] = useState(0);
+  const [playhead, setPlayhead] = useState(0); // fractional frame index for smooth marker
 
   const log = useCallback((text: string, level: LogEntry["level"] = "info") => {
     const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
@@ -131,10 +132,20 @@ function ViewerPage() {
     [flatGps, frameCount],
   );
 
+  // Smooth interpolated marker position: maps fractional playhead to a
+  // fractional GPS index and lerps between the two surrounding points so the
+  // marker glides along the road instead of snapping per-frame.
   const currentPos = useMemo<[number, number] | null>(() => {
-    const g = gpsForFrame(frameIdx);
-    return g ? [g.lat, g.lon] : null;
-  }, [gpsForFrame, frameIdx]);
+    if (!flatGps.length || frameCount === 0) return null;
+    const denom = Math.max(1, frameCount - 1);
+    const gFloat = (playhead / denom) * (flatGps.length - 1);
+    const i0 = Math.max(0, Math.min(flatGps.length - 1, Math.floor(gFloat)));
+    const i1 = Math.min(flatGps.length - 1, i0 + 1);
+    const t = gFloat - i0;
+    const a = flatGps[i0];
+    const b = flatGps[i1];
+    return [a.lat + (b.lat - a.lat) * t, a.lon + (b.lon - a.lon) * t];
+  }, [flatGps, frameCount, playhead]);
 
   const handleMapClick = useCallback(
     (lat: number, lon: number) => {
@@ -152,7 +163,9 @@ function ViewerPage() {
       }
       const denom = Math.max(1, flatGps.length - 1);
       const fIdx = Math.round((best / denom) * (frameCount - 1));
-      setFrameIdx(Math.max(0, Math.min(frameCount - 1, fIdx)));
+      const clamped = Math.max(0, Math.min(frameCount - 1, fIdx));
+      setFrameIdx(clamped);
+      setPlayhead(clamped);
       log(`Jumped to frame ${fIdx + 1} @ ${flatGps[best].lat.toFixed(5)}, ${flatGps[best].lon.toFixed(5)}.`, "success");
     },
     [flatGps, frameCount, log],
@@ -426,7 +439,7 @@ function ViewerPage() {
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
                 {pgrScan
-                  ? `First frame @ byte 0x${pgrScan.frames[0]?.frameStart.toString(16).toUpperCase() ?? "—"}. JPEG12 imagery decode is decoder-bound; export raw plane payloads via the export menu.`
+                  ? `First frame @ byte 0x${pgrScan.frames[0]?.frameStart.toString(16).toUpperCase() ?? "—"}. JPEG12 decoder online — click any point on the map to jump there, or press play to drive the GPS marker along the road.`
                   : "Queue a PGR laser stream or load a survey log to bring the canvas online."}
               </p>
             </div>
@@ -434,7 +447,11 @@ function ViewerPage() {
               <FramePreview
                 scan={pgrScan}
                 frameIdx={Math.min(frameIdx, pgrScan.frames.length - 1)}
-                onFrameIdxChange={setFrameIdx}
+                onFrameIdxChange={(i) => {
+                  setFrameIdx(i);
+                  setPlayhead(i);
+                }}
+                onPlayheadChange={setPlayhead}
               />
             )}
           </div>

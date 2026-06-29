@@ -1,77 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { PgrScanResult } from "@/lib/parsers";
+import { decodePlaneToDataUrl } from "@/lib/jpeg12";
 
 interface Props {
   scan: PgrScanResult;
   frameIdx: number;
   onFrameIdxChange: (idx: number) => void;
+  /** Called every animation frame while playing with a fractional frame index. */
+  onPlayheadChange?: (fractional: number) => void;
 }
 
-interface PlaneImg {
+interface PlaneSlot {
   camera: number;
-  url: string;
   size: number;
+  url: string | null; // decoded dataURL or null while loading
+  failed: boolean;
 }
 
-/**
- * Draws a JPEG plane to a canvas and applies an auto-contrast stretch so dim
- * 8-bit plane payloads (which look near-black raw) become a visible monochrome
- * road image. Returns the canvas dataURL on success, or null on decode failure.
- */
-async function renderPlaneAutoContrast(url: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      try {
-        const w = img.naturalWidth;
-        const h = img.naturalHeight;
-        if (!w || !h) return resolve(null);
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return resolve(null);
-        ctx.drawImage(img, 0, 0);
-        const data = ctx.getImageData(0, 0, w, h);
-        const px = data.data;
-        // Auto-levels on luminance (sample every 16th px for speed)
-        let lo = 255;
-        let hi = 0;
-        for (let i = 0; i < px.length; i += 64) {
-          const v = px[i];
-          if (v < lo) lo = v;
-          if (v > hi) hi = v;
-        }
-        if (hi <= lo) hi = lo + 1;
-        const scale = 255 / (hi - lo);
-        const gamma = 0.85;
-        for (let i = 0; i < px.length; i += 4) {
-          let v = (px[i] - lo) * scale;
-          if (v < 0) v = 0;
-          else if (v > 255) v = 255;
-          v = Math.pow(v / 255, gamma) * 255;
-          px[i] = px[i + 1] = px[i + 2] = v;
-          px[i + 3] = 255;
-        }
-        ctx.putImageData(data, 0, 0);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
-      } catch {
-        resolve(null);
-      }
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-}
-
-export function FramePreview({ scan, frameIdx, onFrameIdxChange }: Props) {
-  const [imgs, setImgs] = useState<PlaneImg[]>([]);
-  const [renders, setRenders] = useState<Record<number, string | null>>({});
+export function FramePreview({
+  scan,
+  frameIdx,
+  onFrameIdxChange,
+  onPlayheadChange,
+}: Props) {
+  const [slots, setSlots] = useState<PlaneSlot[]>([]);
   const [playing, setPlaying] = useState(false);
-  const [fps, setFps] = useState(8);
-  const timerRef = useRef<number | null>(null);
+  const [fps, setFps] = useState(10);
+  const rafRef = useRef<number | null>(null);
 
   const frame = useMemo(() => scan.frames[frameIdx], [scan, frameIdx]);
   const srcFile = useMemo(
@@ -79,66 +35,94 @@ export function FramePreview({ scan, frameIdx, onFrameIdxChange }: Props) {
     [frame, scan.files],
   );
 
+  // Decode the 6 camera planes for the current frame.
   useEffect(() => {
     if (!frame || !srcFile) return;
-    const created: PlaneImg[] = [];
+    let cancelled = false;
+
     const seen = new Set<number>();
+    const picked: { camera: number; offset: number; size: number }[] = [];
     for (const p of frame.planes) {
       if (seen.has(p.camera)) continue;
       seen.add(p.camera);
-      const blob = srcFile.slice(p.offset, p.offset + p.size, "image/jpeg");
-      created.push({
-        camera: p.camera,
-        url: URL.createObjectURL(blob),
-        size: p.size,
-      });
+      picked.push({ camera: p.camera, offset: p.offset, size: p.size });
     }
-    created.sort((a, b) => a.camera - b.camera);
-    setImgs(created);
-    setRenders({});
+    picked.sort((a, b) => a.camera - b.camera);
 
-    // Auto-contrast each plane in parallel
-    let cancelled = false;
-    Promise.all(
-      created.map((img) =>
-        renderPlaneAutoContrast(img.url).then((res) => ({ cam: img.camera, res })),
-      ),
-    ).then((results) => {
-      if (cancelled) return;
-      const map: Record<number, string | null> = {};
-      for (const r of results) map[r.cam] = r.res;
-      setRenders(map);
-    });
+    setSlots(
+      picked.map((p) => ({ camera: p.camera, size: p.size, url: null, failed: false })),
+    );
+
+    (async () => {
+      for (const p of picked) {
+        if (cancelled) return;
+        try {
+          const buf = new Uint8Array(
+            await srcFile.slice(p.offset, p.offset + p.size).arrayBuffer(),
+          );
+          const url = await decodePlaneToDataUrl(buf);
+          if (cancelled) return;
+          setSlots((prev) =>
+            prev.map((s) =>
+              s.camera === p.camera ? { ...s, url, failed: url === null } : s,
+            ),
+          );
+        } catch {
+          if (cancelled) return;
+          setSlots((prev) =>
+            prev.map((s) => (s.camera === p.camera ? { ...s, failed: true } : s)),
+          );
+        }
+      }
+    })();
 
     return () => {
       cancelled = true;
-      created.forEach((i) => URL.revokeObjectURL(i.url));
     };
   }, [frame, srcFile]);
 
+  // Smooth playback loop via requestAnimationFrame; emits a fractional
+  // playhead so the map marker glides between GPS points.
   useEffect(() => {
     if (!playing) {
-      if (timerRef.current) window.clearInterval(timerRef.current);
-      timerRef.current = null;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
       return;
     }
-    timerRef.current = window.setInterval(() => {
-      const next = frameIdx + 1;
-      if (next >= scan.frames.length) {
+    let last = performance.now();
+    let accFractional = frameIdx;
+    let lastWholeFrame = frameIdx;
+
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      accFractional += dt * fps;
+      if (accFractional >= scan.frames.length - 1) {
+        accFractional = scan.frames.length - 1;
         setPlaying(false);
-      } else {
-        onFrameIdxChange(next);
+        onPlayheadChange?.(accFractional);
+        onFrameIdxChange(Math.floor(accFractional));
+        return;
       }
-    }, Math.max(50, 1000 / fps));
-    return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
+      onPlayheadChange?.(accFractional);
+      const whole = Math.floor(accFractional);
+      if (whole !== lastWholeFrame) {
+        lastWholeFrame = whole;
+        onFrameIdxChange(whole);
+      }
+      rafRef.current = requestAnimationFrame(tick);
     };
-  }, [playing, fps, frameIdx, scan.frames.length, onFrameIdxChange]);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, fps, scan.frames.length]);
 
   if (!frame) return null;
 
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[5] border-t border-border bg-background/90 p-3 backdrop-blur">
+    <div className="absolute inset-x-0 bottom-0 z-[5] border-t border-border bg-background/95 p-3 backdrop-blur">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -172,7 +156,11 @@ export function FramePreview({ scan, frameIdx, onFrameIdxChange }: Props) {
           min={0}
           max={scan.frames.length - 1}
           value={frameIdx}
-          onChange={(e) => onFrameIdxChange(parseInt(e.target.value, 10))}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            onFrameIdxChange(v);
+            onPlayheadChange?.(v);
+          }}
           className="flex-1 accent-[color:var(--accent)]"
         />
         <span className="font-mono text-[11px] text-foreground">
@@ -195,42 +183,35 @@ export function FramePreview({ scan, frameIdx, onFrameIdxChange }: Props) {
       </div>
       <div className="grid grid-cols-6 gap-2">
         {Array.from({ length: 6 }).map((_, cam) => {
-          const img = imgs.find((i) => i.camera === cam);
-          const rendered = renders[cam];
-          // rendered === undefined → still processing; null → decode failed
-          const showRaw = img && rendered === undefined;
-          const showAuto = img && rendered;
-          const failed = img && rendered === null;
+          const slot = slots.find((s) => s.camera === cam);
           return (
             <div
               key={cam}
               className="relative aspect-[4/3] overflow-hidden rounded border border-border bg-neutral-900"
             >
-              {showAuto && (
+              {slot?.url && (
                 <img
-                  src={rendered!}
+                  src={slot.url}
                   alt={`Cam ${cam}`}
                   className="size-full object-cover"
                 />
               )}
-              {showRaw && (
-                <img
-                  src={img!.url}
-                  alt={`Cam ${cam} raw`}
-                  className="size-full object-cover opacity-60"
-                />
+              {slot && !slot.url && !slot.failed && (
+                <div className="absolute inset-0 grid place-items-center font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                  decoding…
+                </div>
               )}
-              {(failed || !img) && (
+              {(!slot || slot.failed) && (
                 <div className="absolute inset-0 grid place-items-center px-2 text-center font-mono text-[9px] leading-tight text-muted-foreground">
-                  {img ? "12-bit baseline · decoder-bound" : "no data"}
+                  {slot ? "decode failed" : "no data"}
                 </div>
               )}
               <div className="absolute left-1 top-1 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                 Cam {cam}
               </div>
-              {img && (
+              {slot && (
                 <div className="absolute bottom-1 right-1 rounded bg-background/80 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
-                  {(img.size / 1024).toFixed(0)} KB
+                  {(slot.size / 1024).toFixed(0)} KB
                 </div>
               )}
             </div>
