@@ -121,16 +121,19 @@ export async function decodeJpegBuffer(buf: Uint8Array): Promise<DecodedPlane> {
     decoder.decode();
     const info = decoder.getFrameInfo();
     const decoded: Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array = decoder.getDecodedBuffer();
-    const bytes = new Uint8Array(decoded.byteLength);
-    bytes.set(new Uint8Array(decoded.buffer, decoded.byteOffset, decoded.byteLength));
+    const pixels =
+      decoded instanceof Uint16Array || decoded instanceof Int16Array
+        ? new Uint16Array(decoded)
+        : new Uint8Array(decoded);
     return {
       width: Number(info.width),
       height: Number(info.height),
-      // The Cornerstone 12-bit wrapper reports an 8-bit display path but returns
-      // a 16-bit typed memory view; keep the full samples for contrast stretch.
-      bitsPerSample: precision ?? Number(info.bitsPerSample) ?? 12,
+      // The Cornerstone wrapper may return an 8-bit display array even when the
+      // source JPEG precision is 12-bit. Use the actual returned pixel type for
+      // stretching so we never halve the plane accidentally.
+      bitsPerSample: pixels instanceof Uint16Array ? (precision ?? 12) : 8,
       componentCount: Number(info.componentCount) || 1,
-      pixels: new Uint16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2)),
+      pixels,
     };
   } finally {
     decoder.delete();
