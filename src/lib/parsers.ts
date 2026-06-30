@@ -315,6 +315,12 @@ const PGR_MIN_SUBIMAGE_BYTES = 1024;
 const PGR_PLANES_PER_CAMERA = 4;
 const PGR_CAFEBABE = 0xcafebabe;
 
+function readPgrUint32(view: DataView, offset: number): number {
+  // PGR stores these fields as byte-swapped 32-bit words; this matches the
+  // Python reference's struct.unpack_from("<I") + _swab32 path.
+  return view.getUint32(offset, false);
+}
+
 /**
  * Scan a PGR binary stream for valid frames. For each frame, parse the 24-entry
  * sub-image table and validate JPEG SOI markers. Mirrors the canonical
@@ -362,7 +368,7 @@ export async function scanPgrFrames(
         pos = idx + 4;
         continue;
       }
-      if (view.getUint32(frameStart + 16, false) !== PGR_CAFEBABE) {
+      if (readPgrUint32(view, frameStart + 16) !== PGR_CAFEBABE) {
         pos = idx + 4;
         continue;
       }
@@ -372,8 +378,8 @@ export async function scanPgrFrames(
       for (let i = 0; i < PGR_MAX_SUBIMAGES; i++) {
         const entry = tableBase + i * 8;
         if (entry + 8 > total) break;
-        const imgOff = view.getUint32(entry, false);
-        const imgSize = view.getUint32(entry + 4, false);
+        const imgOff = readPgrUint32(view, entry);
+        const imgSize = readPgrUint32(view, entry + 4);
         if (imgSize < PGR_MIN_SUBIMAGE_BYTES) continue;
         const absStart = frameStart + imgOff;
         const absEnd = absStart + imgSize;
